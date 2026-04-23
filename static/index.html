@@ -565,11 +565,40 @@
 
   const loadVoices = async () => {
     try {
-      const res = await fetch("/voices");
-      if (!res.ok) throw new Error(`Voices request failed (${res.status})`);
-      const voices = await res.json();
+      const [voicesRes, charsRes] = await Promise.all([
+        fetch("/voices"),
+        fetch("/characters").catch(() => null),
+      ]);
+      if (!voicesRes.ok) throw new Error(`Voices request failed (${voicesRes.status})`);
+      const voices = await voicesRes.json();
 
-      // Group by language (primary subtag)
+      let characters = [];
+      if (charsRes && charsRes.ok) {
+        try {
+          const data = await charsRes.json();
+          characters = Array.isArray(data.characters) ? data.characters : [];
+        } catch {}
+      }
+
+      voiceEl.innerHTML = "";
+
+      // Characters first — one optgroup at the top
+      if (characters.length) {
+        const cg = document.createElement("optgroup");
+        cg.label = "Family Guy · RVC";
+        for (const c of characters) {
+          const opt = document.createElement("option");
+          opt.value = `rvc:${c.id}`;
+          opt.textContent = `${c.name} — character`;
+          opt.dataset.locale = "RVC";
+          opt.dataset.name = c.name;
+          opt.dataset.rvc = "1";
+          cg.appendChild(opt);
+        }
+        voiceEl.appendChild(cg);
+      }
+
+      // edge-tts voices grouped by language
       const groups = new Map();
       for (const v of voices) {
         const key = languageName(v.locale);
@@ -577,8 +606,6 @@
         groups.get(key).push(v);
       }
       const sortedKeys = [...groups.keys()].sort((a, b) => a.localeCompare(b));
-
-      voiceEl.innerHTML = "";
       for (const key of sortedKeys) {
         const group = document.createElement("optgroup");
         group.label = key;
@@ -619,9 +646,15 @@
       voiceIdEl.textContent = "—";
       return;
     }
-    voiceMetaEl.textContent = opt.dataset.locale || "";
+    if (opt.dataset.rvc === "1") {
+      voiceMetaEl.textContent = "RVC · Family Guy";
+    } else {
+      voiceMetaEl.textContent = opt.dataset.locale || "";
+    }
     voiceIdEl.textContent = opt.value;
   };
+
+  const isRvcSelected = () => (voiceEl.value || "").startsWith("rvc:");
   voiceEl.addEventListener("change", updateVoiceMeta);
 
   // ---------- Generation ----------
@@ -670,7 +703,7 @@
 
   const handleListen = async () => {
     setBusy(true);
-    setStatus("Synthesising voice&hellip;".replace(/&hellip;/, "…"), "on");
+    setStatus(isRvcSelected() ? "Running RVC — 20–60s…" : "Synthesising voice…", "on");
     try {
       const blob = await generate();
       if (!blob) { setBusy(false); return; }
@@ -691,7 +724,7 @@
 
   const handleExport = async () => {
     setBusy(true);
-    setStatus("Rendering MP3…", "on");
+    setStatus(isRvcSelected() ? "Running RVC — 20–60s…" : "Rendering MP3…", "on");
     try {
       const blob = await generate();
       if (!blob) { setBusy(false); return; }

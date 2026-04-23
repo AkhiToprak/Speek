@@ -1,0 +1,68 @@
+{
+  "peter": {
+    "name": "Peter Griffin",
+    "base_voice": "en-US-GuyNeural",
+    "pitch": 0,
+    "note": "Male, middle-aged, boisterous. Works well with any male US voice."
+  },
+  "stewie": {
+    "name": "Stewie Griffin",
+    "base_voice": "en-GB-RyanNeural",
+    "pitch": 6,
+    "note": "Infant, posh British. Needs a male British source and a strong pitch-up."
+  },
+  "brian": {
+    "name": "Brian Griffin",
+    "base_voice": "en-US-GuyNeural",
+    "pitch": 0,
+    "note": "Male, dry, adult. Most generic male voices convert cleanly."
+  },
+  "lois": {
+    "name": "Lois Griffin",
+    "base_voice": "en-US-AriaNeural",
+    "pitch": 1,
+    "note": "Female, slightly raspy."
+  },
+  "chris": {
+    "name": "Chris Griffin",
+    "base_voice": "en-US-GuyNeural",
+    "pitch": 1,
+    "note": "Teen male, slow cadence."
+  },
+  "meg": {
+    "name": "Meg Griffin",
+    "base_voice": "en-US-JennyNeural",
+    "pitch": 0,
+    "note": "Teen female."
+  },
+  "quagmire": {
+    "name": "Glenn Quagmire",
+    "base_voice": "en-US-GuyNeural",
+    "pitch": 0,
+    "note": "Male, smooth, rapid. Lower index_rate if pronunciation suffers."
+  },
+  "joe": {
+    "name": "Joe Swanson",
+    "base_voice": "en-US-GuyNeural",
+    "pitch": -2,
+    "note": "Male, gravelly, strong. Pitch-down helps."
+  },
+  "cleveland": {
+    "name": "Cleveland Brown",
+    "base_voice": "en-US-GuyNeural",
+    "pitch": 0,
+    "note": "Male, mellow, slow."
+  },
+  "herbert": {
+    "name": "Herbert",
+    "base_voice": "en-US-GuyNeural",
+    "pitch": -2,
+    "note": "Elderly male, wheezy. Pitch-down recommended."
+  },
+  "consuela": {
+    "name": "Consuela",
+    "base_voice": "es-MX-DaliaNeural",
+    "pitch": 0,
+    "note": "Female, Spanish-accented English. Use a Spanish source voice."
+  }
+}

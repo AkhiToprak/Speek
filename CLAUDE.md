@@ -5,8 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install (first run)
+# Base install (first run)
 pip install -r requirements.txt
+
+# Optional: character voices via RVC (adds rvc-python + torch)
+pip install -r requirements-rvc.txt
+# macOS / Windows also need ffmpeg on PATH for the RVC path:
+brew install ffmpeg          # macOS
+winget install ffmpeg        # Windows
 
 # Dev server (auto-reload) — open http://127.0.0.1:8000
 uvicorn main:app --reload
@@ -19,16 +25,36 @@ There is no test suite, linter, or build step configured.
 
 ## Architecture
 
-Speek is a single-user TTS web app. Two files carry the whole product:
+Speek is a single-user TTS web app with two engines:
 
-- **`main.py`** — FastAPI app with three surfaces:
-  - `GET /voices` wraps `edge_tts.list_voices()` and returns a trimmed, sorted list `{id, name, locale, gender}`. `name` is derived from `ShortName` by stripping the `Neural`/`Multilingual` suffix (see `_display_name`).
-  - `POST /generate` streams MP3 bytes from `edge_tts.Communicate(text, voice).stream()` as a `StreamingResponse` — nothing is buffered to disk or to memory as a whole blob server-side.
-  - `GET /` returns `static/index.html`; `/static/*` is mounted via `StaticFiles`. Root is served explicitly (not via StaticFiles) so the page lives at `/` while assets live at `/static/`.
+- **edge-tts** — 400+ MSFT neural voices. Cheap, streams MP3 straight through.
+- **RVC (optional)** — voice conversion; reshapes an edge-tts clip to sound like a specific character (e.g. Family Guy cast). Requires `rvc-python` + `ffmpeg` + user-supplied `.pth` weights.
 
-- **`static/index.html`** — single-file frontend (inline CSS + JS, no framework, no build). On load it fetches `/voices`, groups options into `<optgroup>`s by language using `Intl.DisplayNames`, and defaults to `en-US-AriaNeural` (falling back through `en-US` → any `en-` → first voice). The Listen and Export buttons share one `generate()` call that posts to `/generate` and receives the audio as a `Blob`; Listen wires it to an `<audio>` element via `URL.createObjectURL`, Export triggers a download `<a>` with a filename slugified from the first ~48 chars of the input text. `Cmd/Ctrl+Enter` in the textarea triggers Listen.
+### Backend (`main.py`)
 
-Because edge-tts is the entire engine, there is no model, database, auth, or job queue — requests are 1:1 with MSFT edge-tts calls and failures propagate as HTTP 4xx/5xx with `detail` messages that the frontend surfaces in the status line.
+- `GET /voices` wraps `edge_tts.list_voices()` into `{id, name, locale, gender}`. `_display_name` strips the `Neural`/`Multilingual` suffix from `ShortName`.
+- `GET /characters` returns `{rvc_available, characters, catalogue}`. `characters` only lists entries from `characters.json` whose `.pth` exists under `models/<id>/`, so the dropdown never offers a broken option. `catalogue` is the full JSON so tooling can show "not installed yet" characters.
+- `POST /generate` dispatches on the `voice` field:
+  - Plain edge-tts voice ID → streaming MP3 straight from `edge_tts.Communicate(...).stream()`, nothing buffered server-side.
+  - `rvc:<character_id>` → runs `_generate_character_mp3`: edge-tts saves an MP3, `ffmpeg` converts to 44.1 kHz mono WAV, `RVCInference.infer_file` produces a converted WAV, `ffmpeg` re-encodes to 160 kbps MP3. Temp files are cleaned up in the streaming generator's `finally`.
+- `GET /` returns `static/index.html`; `/static/*` is mounted via `StaticFiles`.
+
+### RVC pipeline details
+
+- **Lazy init**: `RVCInference` is constructed only on first character request (`_get_rvc`); import failure becomes a 500 with setup instructions rather than a startup crash.
+- **Device**: `_detect_device` honours `$SPEEK_RVC_DEVICE`, else picks `cuda:0` → `mps` (Apple Silicon) → `cpu`.
+- **Single-model state**: rvc-python's instance holds one loaded model; `_load_rvc_for` skips `load_model` when the requested `.pth` is already current, and swaps otherwise. A `Lock` serialises inference since the instance is not thread-safe.
+- **Param setting is defensive**: `set_params` / `set_index` are called behind `hasattr` + try/except because rvc-python's minor versions differ on accepted kwargs.
+- **`characters.json`** is hot-reloaded (no restart needed) and stores `{name, base_voice, pitch, note}` per character. `base_voice` is the edge-tts voice used as the RVC source; `pitch` is semitones of shift passed as `f0up_key`.
+- **`models/<id>/`** must contain a `.pth` (required) and optionally an `.index` (improves timbre match). Filenames inside the folder are not significant — first match wins. `.gitignore` excludes `models/*/`, `models/*.pth`, `models/*.index`.
+
+### Frontend (`static/index.html`)
+
+Single-file, inline CSS + JS, no framework, no build. On load it fetches `/voices` and `/characters` in parallel, groups edge-tts voices into `<optgroup>`s by language via `Intl.DisplayNames`, and prepends a `Family Guy · RVC` optgroup whose option values carry an `rvc:` prefix. Default voice cascades `en-US-AriaNeural` → any `en-US` → any `en-` → first voice.
+
+Listen and Export share one `generate()` call that POSTs to `/generate`; Listen plays the returned `Blob` via `<audio>` + `URL.createObjectURL`, Export triggers a download `<a>` with a filename slugified from the first ~48 chars of the text. Status line copy switches between "Synthesising voice…" and "Running RVC — 20–60s…" based on whether the selected voice starts with `rvc:`. `Cmd/Ctrl+Enter` in the textarea triggers Listen.
+
+Failures propagate as HTTP 4xx/5xx with `detail` messages that the frontend surfaces verbatim in the status line.
 
 ## Design system (frontend)
 
